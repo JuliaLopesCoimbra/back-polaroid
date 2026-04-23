@@ -14,8 +14,8 @@ PW, PH        = 800, 1000
 MARGIN_SIDE   = 60
 MARGIN_TOP    = 30
 MARGIN_BOTTOM = 260
-CIRCLE_D      = 520
 CIRCLE_BLUR   = 5    # raio do gaussian blur nas bordas do círculo
+CIRCLE_SAFE   = 40   # margem mínima entre o círculo e a borda da área escura
 
 # ── Layout derivado ───────────────────────────────────────────────────────────
 INNER_W = PW - MARGIN_SIDE * 2          # 680px
@@ -31,6 +31,9 @@ TEXT_H  = MARGIN_BOTTOM                  # 260px
 CIRCLE_CX = PW // 2                     # x=400
 CIRCLE_CY = DARK_Y1 + DARK_H // 2      # y=385
 
+# Diâmetro calculado automaticamente para caber 100% dentro da área escura
+CIRCLE_D = min(INNER_W - CIRCLE_SAFE * 2, DARK_H - CIRCLE_SAFE * 2)
+
 CANVAS_W = PW
 CANVAS_H = PH
 PX, PY   = 0, 0
@@ -38,31 +41,26 @@ PX, PY   = 0, 0
 ASSETS_DIR = Path(__file__).parent / "assets"
 
 
-def _make_radial_gradient(width: int, height: int, cx: int, cy: int) -> Image.Image:
-    """Gradiente radial: COL_DARK_CENTER no centro → COL_DARK_EDGE nas bordas."""
+def _make_radial_gradient(width: int, height: int, cx: int, cy: int, circle_r: int) -> Image.Image:
+    """Efeito spotlight: glow gaussiano centrado no círculo, preto puro nas bordas."""
     y_idx, x_idx = np.mgrid[0:height, 0:width].astype(np.float32)
 
-    # Distância de cada pixel ao centro
-    dx = x_idx - cx
-    dy = y_idx - cy
-    dist = np.sqrt(dx * dx + dy * dy)
+    dist = np.sqrt((x_idx - cx) ** 2 + (y_idx - cy) ** 2)
 
-    # Normaliza pela distância ao canto mais distante
-    max_dist = np.sqrt(max(cx, width - cx) ** 2 + max(cy, height - cy) ** 2)
-    t = np.clip(dist / max_dist, 0.0, 1.0)
+    # t = 1.0 na borda do círculo; > 1.0 fora dele
+    t = dist / circle_r
 
-    # Curva de potência para vignette mais dramática nas bordas
-    t = t ** 1.4
+    # Gaussian tight — o brilho some rapidamente além da borda do círculo
+    sigma = 0.70
+    brightness = np.exp(-(t ** 2) / (2.0 * sigma ** 2))
 
-    c0 = np.array(COL_DARK_CENTER, dtype=np.float32)
-    c1 = np.array(COL_DARK_EDGE,   dtype=np.float32)
+    # Pico de ~42/255 no centro (escuro mas visível); borda do círculo ~7; fora ≈ 0
+    peak = 42.0
+    vals = np.clip(brightness * peak, 0.0, 255.0).astype(np.uint8)
 
-    # Interpola e empilha canais + alpha
-    rgb = (c0[np.newaxis, np.newaxis, :] * (1 - t[..., np.newaxis])
-         + c1[np.newaxis, np.newaxis, :] *  t[..., np.newaxis])
-    rgb = rgb.astype(np.uint8)
+    rgb   = np.stack([vals, vals, vals], axis=-1)
     alpha = np.full((height, width, 1), 255, dtype=np.uint8)
-    arr = np.concatenate([rgb, alpha], axis=-1)
+    arr   = np.concatenate([rgb, alpha], axis=-1)
     return Image.fromarray(arr, "RGBA")
 
 
@@ -107,9 +105,10 @@ def apply_polaroid_frame(
     polaroid = Image.new("RGBA", (PW, PH), COL_WHITE)
 
     # ── Gradiente radial na área escura interna ───────────────────────────────
-    cx_rel = CIRCLE_CX - INNER_X          # 340
-    cy_rel = CIRCLE_CY - DARK_Y1          # 355
-    gradient = _make_radial_gradient(INNER_W, DARK_H, cx_rel, cy_rel)
+    cx_rel   = CIRCLE_CX - INNER_X        # 340
+    cy_rel   = CIRCLE_CY - DARK_Y1        # 355
+    circle_r = CIRCLE_D // 2
+    gradient = _make_radial_gradient(INNER_W, DARK_H, cx_rel, cy_rel, circle_r)
     polaroid.paste(gradient, (INNER_X, DARK_Y1))
 
     # ── Foto recortada em círculo com bordas suaves ───────────────────────────
