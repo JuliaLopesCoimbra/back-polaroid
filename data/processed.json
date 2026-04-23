@@ -1,0 +1,34 @@
+{
+  "processed_files": [
+    "1BP20EXpdqqKmc6jaivHZICejIjnLh6A5",
+    "1qiUvTMVrbZvn1BNe53CDaQ6Hdp6dZjLj",
+    "1ZaQMBIc83V1ANMact-u3TYUeebRfnOzv",
+    "1Z7ANEF9llDVX8IfDdXyn60Y8npk5pAlr"
+  ],
+  "photos": [
+    {
+      "original_name": "www.jpeg",
+      "s3_url": "https://polaroid-event-fotos.s3.us-east-1.amazonaws.com/polaroids/03d77cd5-2844-47fa-8632-ccecc142e4c9.png",
+      "photo_id": "03d77cd5-2844-47fa-8632-ccecc142e4c9",
+      "timestamp": "2026-04-23T16:23:45.932273"
+    },
+    {
+      "original_name": "ddd.jpeg",
+      "s3_url": "https://polaroid-event-fotos.s3.us-east-1.amazonaws.com/polaroids/02a0e972-2885-47ef-a6f7-74dde5ab4aab.png",
+      "photo_id": "02a0e972-2885-47ef-a6f7-74dde5ab4aab",
+      "timestamp": "2026-04-23T16:23:50.016132"
+    },
+    {
+      "original_name": "b.jpeg",
+      "s3_url": "https://polaroid-event-fotos.s3.us-east-1.amazonaws.com/polaroids/4536b231-65bc-49f3-b27f-a235bbde1fa0.png",
+      "photo_id": "4536b231-65bc-49f3-b27f-a235bbde1fa0",
+      "timestamp": "2026-04-23T16:23:54.567310"
+    },
+    {
+      "original_name": "junior.png",
+      "s3_url": "https://polaroid-event-fotos.s3.us-east-1.amazonaws.com/polaroids/b435f88c-bc18-4b37-a48b-2e39c9b61430.png",
+      "photo_id": "b435f88c-bc18-4b37-a48b-2e39c9b61430",
+      "timestamp": "2026-04-23T16:23:58.754863"
+    }
+  ]
+}
