@@ -6,7 +6,7 @@ from loguru import logger
 # ── Dimensões (1200×1600px, proporção 3:4) ────────────────────────────────────
 PW, PH         = 1200, 1600
 MARGIN_TOP     = 30    # espaço branco acima do quadrado preto
-MARGIN_SIDE    = 30    # espaço branco nas laterais
+MARGIN_SIDE    = 70    # espaço branco nas laterais
 MARGIN_BOTTOM  = 60    # espaço branco abaixo da área de texto
 BOTTOM_WHITE   = 300   # altura da área branca com textos
 CIRCLE_D       = 820
