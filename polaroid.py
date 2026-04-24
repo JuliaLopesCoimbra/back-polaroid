@@ -4,26 +4,28 @@ from PIL import Image, ImageDraw, ImageFilter
 from loguru import logger
 
 # ── Dimensões (1200×1600px, proporção 3:4) ────────────────────────────────────
-PW, PH       = 1200, 1600
-MARGIN       = 60
-BOTTOM_WHITE = 300
-CIRCLE_D     = 820
-CIRCLE_BLUR  = 6
+PW, PH         = 1200, 1600
+MARGIN_TOP     = 30    # espaço branco acima do quadrado preto
+MARGIN_SIDE    = 30    # espaço branco nas laterais
+MARGIN_BOTTOM  = 60    # espaço branco abaixo da área de texto
+BOTTOM_WHITE   = 300   # altura da área branca com textos
+CIRCLE_D       = 820
+CIRCLE_BLUR    = 6
 
 # ── Layout derivado ───────────────────────────────────────────────────────────
-INNER_X1 = MARGIN                        # 60
-INNER_X2 = PW - MARGIN                   # 1140
-INNER_W  = INNER_X2 - INNER_X1          # 1080
+INNER_X1 = MARGIN_SIDE                          # 30
+INNER_X2 = PW - MARGIN_SIDE                     # 1170
+INNER_W  = INNER_X2 - INNER_X1                 # 1140
 
-BLACK_Y1 = MARGIN                        # 60
-BLACK_Y2 = PH - MARGIN - BOTTOM_WHITE   # 1320
-BLACK_H  = BLACK_Y2 - BLACK_Y1          # 1260
+BLACK_Y1 = MARGIN_TOP                           # 30
+BLACK_Y2 = PH - MARGIN_BOTTOM - BOTTOM_WHITE   # 1240
+BLACK_H  = BLACK_Y2 - BLACK_Y1                 # 1210
 
-WHITE_Y1 = BLACK_Y2                      # 1320
-WHITE_Y2 = PH - MARGIN                   # 1540
+WHITE_Y1 = BLACK_Y2                             # 1240
+WHITE_Y2 = PH - MARGIN_BOTTOM                   # 1540
 
-CIRCLE_CX = PW // 2                     # 600
-CIRCLE_CY = BLACK_Y1 + BLACK_H // 2    # 690
+CIRCLE_CX = PW // 2                            # 600
+CIRCLE_CY = BLACK_Y1 + BLACK_H // 2           # 635
 
 ASSETS_DIR = Path(__file__).parent / "assets"
 
