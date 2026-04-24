@@ -1,71 +1,35 @@
-import os
 from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 from loguru import logger
 
-# ── Cores ─────────────────────────────────────────────────────────────────────
-COL_WHITE        = (255, 255, 255, 255)
-COL_DARK_EDGE    = (0,   0,   0)       # #000000 — bordas da área escura
-COL_DARK_CENTER  = (8,   8,   8)       # #080808 — centro (preto quase puro)
-
-# ── Dimensões da polaroid (800×1000px) ────────────────────────────────────────
-PW, PH        = 800, 1000
-MARGIN_SIDE   = 60
-MARGIN_TOP    = 30
-MARGIN_BOTTOM = 260
-CIRCLE_BLUR   = 5    # raio do gaussian blur nas bordas do círculo
-CIRCLE_SAFE   = 40   # margem mínima entre o círculo e a borda da área escura
+# ── Dimensões (1200×1600px, proporção 3:4) ────────────────────────────────────
+PW, PH       = 1200, 1600
+MARGIN       = 60
+BOTTOM_WHITE = 220
+CIRCLE_D     = 820
+CIRCLE_BLUR  = 6
 
 # ── Layout derivado ───────────────────────────────────────────────────────────
-INNER_W = PW - MARGIN_SIDE * 2          # 680px
-INNER_X = MARGIN_SIDE                    # x=60
+INNER_X1 = MARGIN                        # 60
+INNER_X2 = PW - MARGIN                   # 1140
+INNER_W  = INNER_X2 - INNER_X1          # 1080
 
-DARK_H  = PH - MARGIN_TOP - MARGIN_BOTTOM  # 710px
-DARK_Y1 = MARGIN_TOP                     # y=30
-DARK_Y2 = DARK_Y1 + DARK_H              # y=740
+BLACK_Y1 = MARGIN                        # 60
+BLACK_Y2 = PH - MARGIN - BOTTOM_WHITE   # 1320
+BLACK_H  = BLACK_Y2 - BLACK_Y1          # 1260
 
-TEXT_Y1 = DARK_Y2                        # y=740
-TEXT_H  = MARGIN_BOTTOM                  # 260px
+WHITE_Y1 = BLACK_Y2                      # 1320
+WHITE_Y2 = PH - MARGIN                   # 1540
 
-CIRCLE_CX = PW // 2                     # x=400
-CIRCLE_CY = DARK_Y1 + DARK_H // 2      # y=385
-
-# Diâmetro calculado automaticamente para caber 100% dentro da área escura
-CIRCLE_D = min(INNER_W - CIRCLE_SAFE * 2, DARK_H - CIRCLE_SAFE * 2)
-
-CANVAS_W = PW
-CANVAS_H = PH
-PX, PY   = 0, 0
+CIRCLE_CX = PW // 2                     # 600
+CIRCLE_CY = BLACK_Y1 + BLACK_H // 2    # 690
 
 ASSETS_DIR = Path(__file__).parent / "assets"
 
 
-def _make_radial_gradient(width: int, height: int, cx: int, cy: int, circle_r: int) -> Image.Image:
-    """Efeito spotlight: glow gaussiano centrado no círculo, preto puro nas bordas."""
-    y_idx, x_idx = np.mgrid[0:height, 0:width].astype(np.float32)
-
-    dist = np.sqrt((x_idx - cx) ** 2 + (y_idx - cy) ** 2)
-
-    # t = 1.0 na borda do círculo; > 1.0 fora dele
-    t = dist / circle_r
-
-    # Gaussian tight — o brilho some rapidamente além da borda do círculo
-    sigma = 0.70
-    brightness = np.exp(-(t ** 2) / (2.0 * sigma ** 2))
-
-    # Pico de ~42/255 no centro (escuro mas visível); borda do círculo ~7; fora ≈ 0
-    peak = 42.0
-    vals = np.clip(brightness * peak, 0.0, 255.0).astype(np.uint8)
-
-    rgb   = np.stack([vals, vals, vals], axis=-1)
-    alpha = np.full((height, width, 1), 255, dtype=np.uint8)
-    arr   = np.concatenate([rgb, alpha], axis=-1)
-    return Image.fromarray(arr, "RGBA")
-
-
 def _circle_crop(photo: Image.Image) -> Image.Image:
-    """Corta a foto em círculo com bordas suavizadas via gaussian blur."""
+    """Recorta a foto em círculo com bordas suavizadas e vignette interno."""
     photo = photo.convert("RGBA")
     w, h = photo.size
     s = min(w, h)
@@ -78,6 +42,21 @@ def _circle_crop(photo: Image.Image) -> Image.Image:
 
     out = Image.new("RGBA", (CIRCLE_D, CIRCLE_D), (0, 0, 0, 0))
     out.paste(photo, (0, 0), mask)
+
+    # Vignette interno: centro transparente → bordas preto alpha 220
+    size = CIRCLE_D
+    center = size / 2
+    y_idx, x_idx = np.ogrid[:size, :size]
+    dist_norm = np.sqrt((x_idx - center) ** 2 + (y_idx - center) ** 2) / center
+    vignette_start = 0.65
+    vignette = np.clip((dist_norm - vignette_start) / (1.0 - vignette_start), 0.0, 1.0)
+    vignette_alpha = (vignette * 220).astype(np.uint8)
+
+    vignette_arr = np.zeros((size, size, 4), dtype=np.uint8)
+    vignette_arr[:, :, 3] = vignette_alpha
+    vignette_img = Image.fromarray(vignette_arr, "RGBA")
+
+    out = Image.alpha_composite(out, vignette_img)
     return out
 
 
@@ -92,32 +71,41 @@ def _paste_rgba(base: Image.Image, overlay: Image.Image, x: int, y: int) -> None
     base.paste(overlay, (x, y), overlay)
 
 
+def _draw_shadow(
+    canvas: Image.Image,
+    x1: int, y1: int, x2: int, y2: int,
+    offset: int = 6, blur: int = 12, alpha: int = 120,
+) -> None:
+    """Sombra suave atrás do retângulo preto."""
+    layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    ImageDraw.Draw(layer).rectangle(
+        [x1 + offset, y1 + offset, x2 + offset, y2 + offset],
+        fill=(0, 0, 0, alpha),
+    )
+    layer = layer.filter(ImageFilter.GaussianBlur(radius=blur))
+    canvas.alpha_composite(layer)
+
+
 def apply_polaroid_frame(
     image_path: str,
     output_path: str,
     event_name: str | None = None,
     event_date: str | None = None,
 ) -> str:
-    # ── Canvas transparente ───────────────────────────────────────────────────
-    canvas = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
+    # ── Canvas branco ─────────────────────────────────────────────────────────
+    canvas = Image.new("RGBA", (PW, PH), (255, 255, 255, 255))
 
-    # ── Frame branco da polaroid ──────────────────────────────────────────────
-    polaroid = Image.new("RGBA", (PW, PH), COL_WHITE)
+    # ── Sombra atrás do retângulo preto ───────────────────────────────────────
+    _draw_shadow(canvas, INNER_X1, BLACK_Y1, INNER_X2, BLACK_Y2,
+                 offset=6, blur=12, alpha=120)
 
-    # ── Gradiente radial na área escura interna ───────────────────────────────
-    cx_rel   = CIRCLE_CX - INNER_X        # 340
-    cy_rel   = CIRCLE_CY - DARK_Y1        # 355
-    circle_r = CIRCLE_D // 2
-    gradient = _make_radial_gradient(INNER_W, DARK_H, cx_rel, cy_rel, circle_r)
-    polaroid.paste(gradient, (INNER_X, DARK_Y1))
+    # ── Retângulo preto sólido ─────────────────────────────────────────────────
+    ImageDraw.Draw(canvas).rectangle(
+        [INNER_X1, BLACK_Y1, INNER_X2, BLACK_Y2],
+        fill=(0, 0, 0, 255),
+    )
 
-    # ── Foto recortada em círculo com bordas suaves ───────────────────────────
-    circular = _circle_crop(Image.open(image_path))
-    cx_off = CIRCLE_CX - CIRCLE_D // 2
-    cy_off = CIRCLE_CY - CIRCLE_D // 2
-    polaroid.paste(circular, (cx_off, cy_off), circular)
-
-    # ── Logos na área escura (cantos superiores) ──────────────────────────────
+    # ── Logos nos cantos superiores do retângulo preto ────────────────────────
     LOGO_H = 90
     LOGO_M = 20
 
@@ -126,37 +114,42 @@ def apply_polaroid_frame(
 
     if logo_left_path.exists():
         logo_l = Image.open(logo_left_path).convert("RGBA")
-        logo_l = _fit_image(logo_l, INNER_W, LOGO_H)
-        _paste_rgba(polaroid, logo_l, INNER_X + LOGO_M, DARK_Y1 + LOGO_M)
+        logo_l = _fit_image(logo_l, INNER_W // 2, LOGO_H)
+        _paste_rgba(canvas, logo_l, INNER_X1 + LOGO_M, BLACK_Y1 + LOGO_M)
     else:
         logger.warning(f"Logo não encontrado: {logo_left_path}")
 
     if logo_right_path.exists():
         logo_r = Image.open(logo_right_path).convert("RGBA")
-        logo_r = _fit_image(logo_r, INNER_W, LOGO_H)
-        rx = INNER_X + INNER_W - LOGO_M - logo_r.width
-        _paste_rgba(polaroid, logo_r, rx, DARK_Y1 + LOGO_M)
+        logo_r = _fit_image(logo_r, INNER_W // 2, LOGO_H)
+        rx = INNER_X2 - LOGO_M - logo_r.width
+        _paste_rgba(canvas, logo_r, rx, BLACK_Y1 + LOGO_M)
     else:
         logger.warning(f"Logo não encontrado: {logo_right_path}")
 
-    # ── Imagem de texto na área branca inferior ───────────────────────────────
-    TEXT_MARGIN = 20
+    # ── Foto em círculo centralizada no retângulo preto ───────────────────────
+    circular = _circle_crop(Image.open(image_path))
+    cx_off = CIRCLE_CX - CIRCLE_D // 2   # 190
+    cy_off = CIRCLE_CY - CIRCLE_D // 2   # 280
+    _paste_rgba(canvas, circular, cx_off, cy_off)
+
+    # ── Imagem de textos na área branca inferior ──────────────────────────────
+    TEXT_MARGIN = 16
     textos_path = ASSETS_DIR / "textos.png"
 
     if textos_path.exists():
         textos = Image.open(textos_path).convert("RGBA")
         max_w = round(PW * 0.80)
-        max_h = TEXT_H - TEXT_MARGIN * 2
+        max_h = (WHITE_Y2 - WHITE_Y1) - TEXT_MARGIN * 2
         textos = _fit_image(textos, max_w, max_h)
         tx = (PW - textos.width) // 2
-        ty = TEXT_Y1 + (TEXT_H - textos.height) // 2
-        _paste_rgba(polaroid, textos, tx, ty)
+        ty = WHITE_Y1 + ((WHITE_Y2 - WHITE_Y1) - textos.height) // 2
+        _paste_rgba(canvas, textos, tx, ty)
     else:
         logger.warning(f"Textos não encontrado: {textos_path}")
 
-    # ── Composição final e salvar ─────────────────────────────────────────────
-    canvas.paste(polaroid, (PX, PY), polaroid)
+    # ── Salvar ────────────────────────────────────────────────────────────────
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    canvas.save(output_path, "PNG")
+    canvas.convert("RGB").save(output_path, "PNG")
     logger.info(f"Polaroid saved → {output_path}")
     return output_path
