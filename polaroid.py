@@ -6,7 +6,7 @@ from loguru import logger
 # ── Dimensões (1200×1600px, proporção 3:4) ────────────────────────────────────
 PW, PH       = 1200, 1600
 MARGIN       = 60
-BOTTOM_WHITE = 220
+BOTTOM_WHITE = 300
 CIRCLE_D     = 820
 CIRCLE_BLUR  = 6
 
@@ -71,20 +71,6 @@ def _paste_rgba(base: Image.Image, overlay: Image.Image, x: int, y: int) -> None
     base.paste(overlay, (x, y), overlay)
 
 
-def _draw_shadow(
-    canvas: Image.Image,
-    x1: int, y1: int, x2: int, y2: int,
-    offset: int = 6, blur: int = 12, alpha: int = 120,
-) -> None:
-    """Sombra suave atrás do retângulo preto."""
-    layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    ImageDraw.Draw(layer).rectangle(
-        [x1 + offset, y1 + offset, x2 + offset, y2 + offset],
-        fill=(0, 0, 0, alpha),
-    )
-    layer = layer.filter(ImageFilter.GaussianBlur(radius=blur))
-    canvas.alpha_composite(layer)
-
 
 def apply_polaroid_frame(
     image_path: str,
@@ -95,10 +81,6 @@ def apply_polaroid_frame(
     # ── Canvas branco ─────────────────────────────────────────────────────────
     canvas = Image.new("RGBA", (PW, PH), (255, 255, 255, 255))
 
-    # ── Sombra atrás do retângulo preto ───────────────────────────────────────
-    _draw_shadow(canvas, INNER_X1, BLACK_Y1, INNER_X2, BLACK_Y2,
-                 offset=6, blur=12, alpha=120)
-
     # ── Retângulo preto sólido ─────────────────────────────────────────────────
     ImageDraw.Draw(canvas).rectangle(
         [INNER_X1, BLACK_Y1, INNER_X2, BLACK_Y2],
@@ -106,7 +88,7 @@ def apply_polaroid_frame(
     )
 
     # ── Logos nos cantos superiores do retângulo preto ────────────────────────
-    LOGO_H = 90
+    LOGO_H = 130
     LOGO_M = 20
 
     logo_left_path  = ASSETS_DIR / "logo_nespresso.png"
@@ -134,16 +116,17 @@ def apply_polaroid_frame(
     _paste_rgba(canvas, circular, cx_off, cy_off)
 
     # ── Imagem de textos na área branca inferior ──────────────────────────────
-    TEXT_MARGIN = 16
-    textos_path = ASSETS_DIR / "textos.png"
+    TEXT_PAD_TOP = 30
+    TEXT_MARGIN  = 16
+    textos_path  = ASSETS_DIR / "textos.png"
 
     if textos_path.exists():
         textos = Image.open(textos_path).convert("RGBA")
-        max_w = round(PW * 0.80)
-        max_h = (WHITE_Y2 - WHITE_Y1) - TEXT_MARGIN * 2
-        textos = _fit_image(textos, max_w, max_h)
+        max_w  = round(PW * 0.88)
+        area_h = (WHITE_Y2 - WHITE_Y1) - TEXT_PAD_TOP - TEXT_MARGIN
+        textos = _fit_image(textos, max_w, area_h)
         tx = (PW - textos.width) // 2
-        ty = WHITE_Y1 + ((WHITE_Y2 - WHITE_Y1) - textos.height) // 2
+        ty = WHITE_Y1 + TEXT_PAD_TOP + (area_h - textos.height) // 2
         _paste_rgba(canvas, textos, tx, ty)
     else:
         logger.warning(f"Textos não encontrado: {textos_path}")
