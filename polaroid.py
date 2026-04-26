@@ -10,6 +10,8 @@ MARGIN_BOTTOM  = 60    # espaço branco abaixo da área de texto
 BOTTOM_WHITE   = 300   # altura da área branca com textos
 CIRCLE_D       = 820
 CIRCLE_BLUR    = 6
+# Reduz áreas escuras da borda ao recortar um pouco mais ao centro (zoom-in).
+CIRCLE_SOURCE_SCALE = 0.86
 
 # ── Layout derivado ───────────────────────────────────────────────────────────
 INNER_X1 = MARGIN_SIDE                          # 30
@@ -33,13 +35,15 @@ def _circle_crop(photo: Image.Image) -> Image.Image:
     """Recorta a foto em círculo com bordas suavizadas."""
     photo = photo.convert("RGBA")
     w, h = photo.size
-    s = min(w, h)
+    s = int(min(w, h) * CIRCLE_SOURCE_SCALE)
+    s = max(1, s)
     photo = photo.crop(((w - s) // 2, (h - s) // 2, (w + s) // 2, (h + s) // 2))
     photo = photo.resize((CIRCLE_D, CIRCLE_D), Image.LANCZOS)
 
     mask = Image.new("L", (CIRCLE_D, CIRCLE_D), 0)
     ImageDraw.Draw(mask).ellipse((0, 0, CIRCLE_D - 1, CIRCLE_D - 1), fill=255)
-    mask = mask.filter(ImageFilter.GaussianBlur(radius=CIRCLE_BLUR))
+    # Borda firme evita gradiente escuro aparente sobre fundo preto.
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=0))
 
     out = Image.new("RGBA", (CIRCLE_D, CIRCLE_D), (0, 0, 0, 0))
     out.paste(photo, (0, 0), mask)
