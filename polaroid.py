@@ -1,5 +1,4 @@
 from pathlib import Path
-import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 from loguru import logger
 
@@ -31,7 +30,7 @@ ASSETS_DIR = Path(__file__).parent / "assets"
 
 
 def _circle_crop(photo: Image.Image) -> Image.Image:
-    """Recorta a foto em círculo com bordas suavizadas e vignette interno."""
+    """Recorta a foto em círculo com bordas suavizadas."""
     photo = photo.convert("RGBA")
     w, h = photo.size
     s = min(w, h)
@@ -44,21 +43,6 @@ def _circle_crop(photo: Image.Image) -> Image.Image:
 
     out = Image.new("RGBA", (CIRCLE_D, CIRCLE_D), (0, 0, 0, 0))
     out.paste(photo, (0, 0), mask)
-
-    # Vignette interno: centro transparente → bordas preto alpha 220
-    size = CIRCLE_D
-    center = size / 2
-    y_idx, x_idx = np.ogrid[:size, :size]
-    dist_norm = np.sqrt((x_idx - center) ** 2 + (y_idx - center) ** 2) / center
-    vignette_start = 0.65
-    vignette = np.clip((dist_norm - vignette_start) / (1.0 - vignette_start), 0.0, 1.0)
-    vignette_alpha = (vignette * 220).astype(np.uint8)
-
-    vignette_arr = np.zeros((size, size, 4), dtype=np.uint8)
-    vignette_arr[:, :, 3] = vignette_alpha
-    vignette_img = Image.fromarray(vignette_arr, "RGBA")
-
-    out = Image.alpha_composite(out, vignette_img)
     return out
 
 
