@@ -51,6 +51,9 @@ def process_photo(file_info: dict, processed: dict, processed_ids: set) -> None:
     s3_key = f"polaroids/{photo_id}.png"
     s3_url = with_retry(upload_photo, polaroid_path, s3_key)
 
+    Path(local_path).unlink(missing_ok=True)
+    Path(polaroid_path).unlink(missing_ok=True)
+
     entry = {
         "original_name": file_name,
         "s3_url": s3_url,
