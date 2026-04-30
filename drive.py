@@ -7,6 +7,7 @@ from pathlib import Path
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.errors import HttpError
 from loguru import logger
 from dotenv import load_dotenv
 
@@ -36,25 +37,48 @@ def _save_processed(data: dict) -> None:
 
 
 def _get_service():
-    creds = service_account.Credentials.from_service_account_file(
-        str(SERVICE_ACCOUNT_FILE), scopes=SCOPES
-    )
-    return build("drive", "v3", credentials=creds, cache_discovery=False)
+    try:
+        creds = service_account.Credentials.from_service_account_file(
+            str(SERVICE_ACCOUNT_FILE), scopes=SCOPES
+        )
+        service = build("drive", "v3", credentials=creds, cache_discovery=False)
+        logger.info("Google Drive client initialized successfully")
+        print("[DRIVE] Cliente Google Drive inicializado com sucesso", flush=True)
+        return service
+    except Exception as exc:
+        logger.exception(f"Failed to initialize Google Drive client: {exc}")
+        print(f"[DRIVE] Falha ao inicializar cliente Google Drive: {exc}", flush=True)
+        raise
 
 
 def _download_file(service, file_id: str, file_name: str) -> Path:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
     dest = DOWNLOAD_DIR / file_name
-    request = service.files().get_media(fileId=file_id)
-    with io.FileIO(str(dest), "wb") as fh:
-        downloader = MediaIoBaseDownload(fh, request)
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
-            if status:
-                logger.debug(f"Download {file_name}: {int(status.progress() * 100)}%")
-    return dest
+    logger.info(f"Starting Google Drive download: name={file_name} id={file_id}")
+    print(f"[DRIVE] Iniciando download: {file_name} ({file_id})", flush=True)
+    try:
+        request = service.files().get_media(fileId=file_id)
+        with io.FileIO(str(dest), "wb") as fh:
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+                if status:
+                    logger.debug(f"Download {file_name}: {int(status.progress() * 100)}%")
+        logger.info(f"Google Drive download completed: {dest}")
+        print(f"[DRIVE] Download concluido: {dest}", flush=True)
+        return dest
+    except HttpError as exc:
+        logger.exception(
+            f"Google Drive API error while downloading file_id={file_id} name={file_name}: {exc}"
+        )
+        print(f"[DRIVE] Erro de API ao baixar arquivo {file_name} ({file_id}): {exc}", flush=True)
+        raise
+    except Exception as exc:
+        logger.exception(f"Unexpected error while downloading file_id={file_id} name={file_name}: {exc}")
+        print(f"[DRIVE] Erro inesperado no download de {file_name} ({file_id}): {exc}", flush=True)
+        raise
 
 
 def watch_folder(folder_id: str = FOLDER_ID) -> tuple[list, dict, set]:
@@ -70,15 +94,24 @@ def watch_folder(folder_id: str = FOLDER_ID) -> tuple[list, dict, set]:
         ")"
     )
 
-    results = (
-        service.files()
-        .list(
-            q=query,
-            fields="files(id, name, mimeType, createdTime)",
-            orderBy="createdTime",
+    try:
+        results = (
+            service.files()
+            .list(
+                q=query,
+                fields="files(id, name, mimeType, createdTime)",
+                orderBy="createdTime",
+            )
+            .execute()
         )
-        .execute()
-    )
+    except HttpError as exc:
+        logger.exception(f"Google Drive API error while listing folder {folder_id}: {exc}")
+        print(f"[DRIVE] Erro de API ao listar pasta {folder_id}: {exc}", flush=True)
+        raise
+    except Exception as exc:
+        logger.exception(f"Unexpected error while listing folder {folder_id}: {exc}")
+        print(f"[DRIVE] Erro inesperado ao listar pasta {folder_id}: {exc}", flush=True)
+        raise
     files = results.get("files", [])
     logger.info(f"Found {len(files)} file(s) in folder, {len(processed_ids)} already processed")
 
